@@ -1,0 +1,20 @@
+
+> dynamic-laboratory-calculator@0.1.0 dev
+> vite --host 127.0.0.1
+
+
+  [32m[1mVITE[22m v7.3.3[39m  [2mready in [0m[1m357[22m[2m[0m ms[22m
+
+  [32m➜[39m  [1mLocal[22m:   [36mhttp://127.0.0.1:[1m5173[22m/[39m
+[2m12:49:59[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/styles.css[22m
+[2m12:49:59[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/styles.css[22m
+[2m12:49:59[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/styles.css, /src/pages/LaboratoryPage.tsx, /src/pages/CalculationPage.tsx, /src/pages/DashboardPage.tsx[22m
+[2m12:51:48[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/pages/CalculationPage.tsx, /src/styles.css[22m
+[2m14:35:39[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/styles.css[22m
+[2m14:35:39[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/styles.css, /src/pages/LaboratoryPage.tsx, /src/pages/CalculationPage.tsx, /src/pages/DashboardPage.tsx[22m
+[2m14:36:13[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/styles.css, /src/pages/CalculationPage.tsx[22m
+[2m14:36:49[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/styles.css, /src/pages/CalculationPage.tsx[22m
+[2m14:36:49[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/pages/CalculationPage.tsx, /src/styles.css[22m
+[2m14:36:57[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/styles.css, /src/pages/CalculationPage.tsx, /src/pages/HistoryPage.tsx[22m
+[2m14:37:02[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/styles.css, /src/pages/CalculationPage.tsx, /src/pages/HistoryPage.tsx[22m
+[2m14:37:30[22m [36m[1m[vite][22m[39m [90m[2m(client)[22m[39m [32mhmr update [39m[2m/src/styles.css, /src/pages/CalculationPage.tsx, /src/pages/HistoryPage.tsx[22m
