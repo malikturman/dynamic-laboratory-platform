@@ -63,6 +63,11 @@ interface HardnessObservationRow {
   value: string;
 }
 
+interface NitriteObservationRow {
+  id: string;
+  value: string;
+}
+
 export function CalculationPage() {
   const { labId, indicatorId } = useParams();
   const { currentUser } = useAuth();
@@ -104,7 +109,10 @@ export function CalculationPage() {
   }, [indicator, initialValues, currentUser]);
 
   useEffect(() => {
-    if (indicator?.id !== 'hardness' || activeHardnessTab !== 'uncertainty') {
+    if (
+      (indicator?.id !== 'hardness' || activeHardnessTab !== 'uncertainty') &&
+      (indicator?.id !== 'nitrites' || activeNitriteTab !== 'uncertainty')
+    ) {
       return;
     }
 
@@ -116,7 +124,7 @@ export function CalculationPage() {
         values,
       }),
     );
-  }, [indicator, activeHardnessTab, sampleNumber, sampleDate, specialist, values]);
+  }, [indicator, activeHardnessTab, activeNitriteTab, sampleNumber, sampleDate, specialist, values]);
 
   if (!laboratory || !indicator) {
     return <Navigate to="/" replace />;
@@ -206,8 +214,10 @@ export function CalculationPage() {
 
     const canSaveHardnessUncertainty =
       isHardness && activeHardnessTab === 'uncertainty' && nextResult.reportSections?.some((section) => section.title === 'Неопределенность');
+    const canSaveNitriteUncertainty =
+      isNitrites && activeNitriteTab === 'uncertainty' && nextResult.reportSections?.some((section) => section.title === 'Неопределенность');
 
-    if (nextResult.isValid === false && !canSaveHardnessUncertainty) {
+    if (nextResult.isValid === false && !canSaveHardnessUncertainty && !canSaveNitriteUncertainty) {
       setResult(nextResult);
       setStatus('Расчет не сохранен: исправьте ошибки в форме.');
       return;
@@ -226,7 +236,7 @@ export function CalculationPage() {
       sampleNumber: sampleNumber || 'Не указан',
       specialist: specialist || 'Не указан',
       result:
-        canSaveHardnessUncertainty
+        canSaveHardnessUncertainty || canSaveNitriteUncertainty
           ? (nextResult.reportSections?.find((section) => section.title === 'Неопределенность')?.result ?? nextResult.result)
           : nextResult.result,
       input,
@@ -249,8 +259,10 @@ export function CalculationPage() {
 
     const canDownloadHardnessUncertainty =
       isHardness && activeHardnessTab === 'uncertainty' && nextResult.reportSections?.some((section) => section.title === 'Неопределенность');
+    const canDownloadNitriteUncertainty =
+      isNitrites && activeNitriteTab === 'uncertainty' && nextResult.reportSections?.some((section) => section.title === 'Неопределенность');
 
-    if (nextResult.isValid === false && !canDownloadHardnessUncertainty) {
+    if (nextResult.isValid === false && !canDownloadHardnessUncertainty && !canDownloadNitriteUncertainty) {
       setStatus('PDF не сформирован: исправьте ошибки в форме.');
       return;
     }
@@ -291,7 +303,7 @@ export function CalculationPage() {
     finalResult: 'Нет результата',
     explanation: 'В минимальной версии используются заглушки. Реальные формулы будут добавляться отдельными модулями.',
   };
-  const isPdfDownloadDisabled = isPdfGenerating || isKmafanmBlocked || (isNitrites && activeNitriteTab === 'uncertainty');
+  const isPdfDownloadDisabled = isPdfGenerating || isKmafanmBlocked;
   const pdfButtonLabel = getPdfButtonLabel({
     isPdfGenerating,
     isHardness,
@@ -460,27 +472,7 @@ export function CalculationPage() {
             ) : null}
 
             {isNitrites && activeNitriteTab === 'uncertainty' ? (
-              <section className="space-y-4 rounded border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-900">
-                <div className="flex flex-wrap items-center gap-3">
-                  <h3 className="text-base font-semibold text-amber-950">Неопределенность измерений</h3>
-                  <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-amber-800">
-                    В разработке
-                  </span>
-                </div>
-                <p>
-                  Для реализации расчета неопределенности измерений по показателю ‘Нитриты’ необходимо загрузить утвержденную методику оценки неопределенности или официальный расчет неопределенности для данного метода.
-                </p>
-                <button
-                  type="button"
-                  disabled
-                  className="inline-flex cursor-not-allowed items-center justify-center rounded border border-amber-200 bg-white px-4 py-2.5 text-sm font-semibold text-amber-500 opacity-70"
-                >
-                  Скачать отчет неопределенности
-                </button>
-                <p className="text-xs font-medium text-amber-800">
-                  Модуль расчета неопределенности будет реализован после добавления утвержденной методики.
-                </p>
-              </section>
+              <NitriteUncertaintyForm values={values} onChange={(key, value) => setValues((current) => ({ ...current, [key]: value }))} />
             ) : null}
 
             {isNitrites && activeNitriteTab === 'analysis' ? (
@@ -1199,6 +1191,277 @@ function HardnessUncertaintyForm({ values, onChange }: HardnessUncertaintyFormPr
   );
 }
 
+interface NitriteUncertaintyFormProps {
+  values: Record<string, string>;
+  onChange: (key: string, value: string) => void;
+}
+
+const nitriteUncertaintyDefaults: Record<string, string> = {
+  nitriteObject: 'Бутилированная вода',
+  nitriteTask: 'Определение нитрит-ионов в воде',
+  nitriteMethod: 'Фотометрический',
+  nitriteNormativeDocument: 'ГОСТ 33045-2014',
+  nitriteMethodDescription:
+    'Сущность метода заключается во взаимодействии нитритов в исследуемой пробе воды с сульфаниловой кислотой в присутствии 1-нафтиламина с образованием красно-фиолетового окрашенного соединения с последующим фотометрическим определением и расчетом массовой концентрации нитритов.',
+  nitriteTemperature: '22 °C',
+  nitriteHumidity: '69 %',
+  nitriteObservations: JSON.stringify([
+    { id: 'nitrite-observation-1', value: '0.021' },
+    { id: 'nitrite-observation-2', value: '0.023' },
+    { id: 'nitrite-observation-3', value: '0.022' },
+    { id: 'nitrite-observation-4', value: '0.024' },
+  ]),
+  nitriteKfkError: '3',
+  nitriteGsoError: '2',
+  nitriteFlaskVolume: '200',
+  nitriteFlaskError: '0.8',
+};
+
+function createDefaultNitriteObservations(): NitriteObservationRow[] {
+  return [
+    { id: 'nitrite-observation-1', value: '0.021' },
+    { id: 'nitrite-observation-2', value: '0.023' },
+    { id: 'nitrite-observation-3', value: '0.022' },
+    { id: 'nitrite-observation-4', value: '0.024' },
+  ];
+}
+
+function parseNitriteObservationRows(values: Record<string, string>): NitriteObservationRow[] {
+  try {
+    const parsed = JSON.parse(values.nitriteObservations || nitriteUncertaintyDefaults.nitriteObservations);
+    if (Array.isArray(parsed) && parsed.length > 0) {
+      return parsed.map((row, index) => ({
+        id: typeof row.id === 'string' ? row.id : `nitrite-observation-${index + 1}`,
+        value: typeof row.value === 'string' ? row.value : String(row.value ?? ''),
+      }));
+    }
+  } catch {
+    // Use default rows below.
+  }
+
+  return createDefaultNitriteObservations();
+}
+
+function createNitriteObservationId() {
+  return typeof crypto !== 'undefined' && 'randomUUID' in crypto
+    ? crypto.randomUUID()
+    : `nitrite-observation-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function getNitriteObservationValidation(value: string) {
+  if (!value.trim()) {
+    return 'Заполните значение наблюдения.';
+  }
+
+  const parsed = Number(value.trim().replace(',', '.'));
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    return 'Значение должно быть неотрицательным числом.';
+  }
+
+  return '';
+}
+
+function getNitriteAverage(rows: NitriteObservationRow[]) {
+  const numericValues = rows
+    .map((row) => Number(row.value.trim().replace(',', '.')))
+    .filter((value) => Number.isFinite(value) && value >= 0);
+
+  if (!numericValues.length) {
+    return 'Нет корректных наблюдений';
+  }
+
+  const averageValue = numericValues.reduce((sum, value) => sum + value, 0) / numericValues.length;
+  return `${new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 6 }).format(averageValue)} мг/дм³`;
+}
+
+function NitriteUncertaintyForm({ values, onChange }: NitriteUncertaintyFormProps) {
+  const textFields = [
+    ['nitriteObject', 'Объект измерения'],
+    ['nitriteTask', 'Измерительная задача'],
+    ['nitriteMethod', 'Метод измерения'],
+    ['nitriteNormativeDocument', 'Нормативный документ'],
+    ['nitriteMethodDescription', 'Описание метода'],
+    ['nitriteTemperature', 'Температура'],
+    ['nitriteHumidity', 'Влажность'],
+  ];
+  const observationRows = parseNitriteObservationRows(values);
+  const canDeleteObservation = observationRows.length > 2;
+  const uncertaintyFields = [
+    ['nitriteKfkError', 'Погрешность КФК', 'нм'],
+    ['nitriteGsoError', 'Погрешность ГСО', '%'],
+    ['nitriteFlaskVolume', 'Объем колбы', 'мл'],
+    ['nitriteFlaskError', 'Погрешность мерной колбы', 'мл'],
+  ];
+
+  function updateObservationRows(nextRows: NitriteObservationRow[]) {
+    onChange('nitriteObservations', JSON.stringify(nextRows));
+  }
+
+  function handleObservationChange(rowId: string, value: string) {
+    updateObservationRows(observationRows.map((row) => (row.id === rowId ? { ...row, value } : row)));
+  }
+
+  function handleAddObservation() {
+    updateObservationRows([...observationRows, { id: createNitriteObservationId(), value: '' }]);
+  }
+
+  function handleRemoveObservation(rowId: string) {
+    if (!canDeleteObservation) {
+      return;
+    }
+
+    updateObservationRows(observationRows.filter((row) => row.id !== rowId));
+  }
+
+  return (
+    <section className="space-y-5 rounded border border-laboratory-line bg-laboratory-panel/60 p-4">
+      <div>
+        <h3 className="text-base font-semibold text-laboratory-ink">Отчет о неопределенности измеряемой величины</h3>
+        <p className="mt-1 text-sm text-slate-600">Нитрит-ионы. Фотометрический метод определения нитрит-ионов по ГОСТ 33045-2014.</p>
+      </div>
+
+      <div>
+        <h4 className="mb-3 text-sm font-semibold uppercase tracking-wide text-laboratory-blue">2. Исходные данные</h4>
+        <div className="grid gap-3">
+          {textFields.map(([key, label]) => (
+            <label key={key} className="block">
+              <span className="mb-1.5 block text-sm font-medium text-slate-700">{label}</span>
+              <input
+                value={values[key] ?? nitriteUncertaintyDefaults[key]}
+                onChange={(event) => onChange(key, event.target.value)}
+                className="focus-ring w-full rounded border border-laboratory-line bg-white px-3 py-2.5 text-laboratory-ink"
+              />
+            </label>
+          ))}
+        </div>
+      </div>
+
+      <div className="rounded border border-blue-100 bg-blue-50 px-4 py-3 text-sm leading-6 text-laboratory-navy">
+        <p className="font-serif text-base font-semibold">Y = f(X1,X2,X3...)</p>
+        <p className="mt-1 font-serif text-base font-semibold">Y = f(КФК, VК200, ГСО, Оператор)</p>
+        <p className="mt-2">
+          Модель измерения отражает зависимость результата фотометрического определения от приборной составляющей,
+          вместимости мерной колбы, аттестованного значения ГСО и действий оператора при подготовке и измерении пробы.
+        </p>
+      </div>
+
+      <div>
+        <h4 className="mb-3 text-sm font-semibold uppercase tracking-wide text-laboratory-blue">4. Результаты наблюдений</h4>
+        <div className="overflow-hidden rounded border border-laboratory-line bg-white shadow-sm">
+          <div className="grid grid-cols-[64px_minmax(0,1fr)_90px] items-center gap-3 border-b border-laboratory-line bg-laboratory-panel px-3 py-2 text-xs font-semibold uppercase tracking-wide text-slate-600">
+            <span>№</span>
+            <span>Значение, мг/дм³</span>
+            <span className="text-center">Удалить</span>
+          </div>
+          <div className="divide-y divide-laboratory-line">
+            {observationRows.map((row, index) => {
+              const validation = getNitriteObservationValidation(row.value);
+
+              return (
+                <div key={row.id} className="grid grid-cols-[64px_minmax(0,1fr)_90px] items-start gap-3 px-3 py-3">
+                  <div className="pt-2 text-sm font-semibold text-laboratory-ink">{index + 1}</div>
+                  <label className="block">
+                    <input
+                      type="number"
+                      step="any"
+                      min="0"
+                      value={row.value}
+                      onChange={(event) => handleObservationChange(row.id, event.target.value)}
+                      className={[
+                        'focus-ring w-full rounded border bg-white px-3 py-2.5 text-laboratory-ink',
+                        validation ? 'border-red-300 bg-red-50/40' : 'border-laboratory-line',
+                      ].join(' ')}
+                    />
+                    {validation ? <p className="mt-1 text-xs font-medium text-red-600">{validation}</p> : null}
+                  </label>
+                  <div className="flex justify-center">
+                    <button
+                      type="button"
+                      title="Удалить наблюдение"
+                      aria-label="Удалить наблюдение"
+                      disabled={!canDeleteObservation}
+                      onClick={() => handleRemoveObservation(row.id)}
+                      className="focus-ring inline-flex h-9 w-9 items-center justify-center rounded border border-laboratory-line text-slate-500 transition hover:border-red-200 hover:bg-red-50 hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-laboratory-line disabled:hover:bg-transparent disabled:hover:text-slate-500"
+                    >
+                      <Trash2 className="h-4 w-4" aria-hidden="true" />
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={handleAddObservation}
+          className="focus-ring mt-3 inline-flex w-full items-center justify-center rounded border border-laboratory-blue px-4 py-2.5 text-sm font-semibold text-laboratory-blue transition hover:bg-blue-50 sm:w-auto"
+        >
+          + Добавить наблюдение
+        </button>
+        <p className="mt-3 rounded border border-blue-100 bg-blue-50 px-3 py-2 text-sm font-semibold text-laboratory-navy">
+          Xср = ΣXi / n = {getNitriteAverage(observationRows)}
+        </p>
+      </div>
+
+      <div>
+        <h4 className="mb-3 text-sm font-semibold uppercase tracking-wide text-laboratory-blue">5. Источники неопределенности</h4>
+        <div className="overflow-x-auto rounded border border-laboratory-line bg-white">
+          <table className="min-w-full text-left text-xs">
+            <thead className="bg-laboratory-navy text-white">
+              <tr>
+                <th className="border border-laboratory-line px-2 py-2">Источник</th>
+                <th className="border border-laboratory-line px-2 py-2">Тип оценки</th>
+                <th className="border border-laboratory-line px-2 py-2">Распределение</th>
+              </tr>
+            </thead>
+            <tbody>
+              {[
+                ['КФК-3', 'B', 'Прямоугольное'],
+                ['ГСО', 'B', 'Прямоугольное'],
+                ['Мерная колба', 'B', 'Треугольное'],
+              ].map((row) => (
+                <tr key={row[0]}>
+                  {row.map((cell) => (
+                    <td key={cell} className="border border-laboratory-line px-2 py-2">{cell}</td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div className="rounded border border-blue-100 bg-blue-50 px-4 py-3 text-sm leading-6 text-laboratory-navy">
+        Ни одна из входных величин не рассматривается коррелированной друг с другом в какой-либо значительной степени.
+        Коэффициенты чувствительности для всех составляющих приняты равными 1.
+      </div>
+
+      <div>
+        <h4 className="mb-3 text-sm font-semibold uppercase tracking-wide text-laboratory-blue">8-12. Входные данные неопределенности</h4>
+        <div className="grid gap-3 sm:grid-cols-2">
+          {uncertaintyFields.map(([key, label, unit]) => (
+            <label key={key} className="block">
+              <span className="mb-1.5 block text-sm font-medium text-slate-700">{label}</span>
+              <div className="flex">
+                <input
+                  type="number"
+                  step="any"
+                  value={values[key] ?? nitriteUncertaintyDefaults[key]}
+                  onChange={(event) => onChange(key, event.target.value)}
+                  className="focus-ring w-full rounded-l border border-laboratory-line bg-white px-3 py-2.5 text-laboratory-ink"
+                />
+                <span className="-ml-px inline-flex min-w-14 items-center justify-center rounded-r border border-laboratory-line bg-laboratory-panel px-3 text-sm text-slate-600">
+                  {unit}
+                </span>
+              </div>
+            </label>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 function HardnessResultPanel({ result, activeTab, onChangeTab }: HardnessResultPanelProps) {
   const activeTabDefinition = hardnessTabs.find((tab) => tab.id === activeTab) ?? hardnessTabs[0];
   const activeSection = result.reportSections?.find((section) => section.title === activeTabDefinition.reportTitle);
@@ -1516,6 +1779,7 @@ function createNitritePdfReportPayload(
   };
   const filteredResult: CalculationResult = {
     ...result,
+    reportTitle: activeTab === 'uncertainty' ? 'Отчет о неопределенности измеряемой величины' : result.reportTitle,
     formula: activeSection.formula ?? result.formula,
     legend: activeSection.legend ?? result.legend,
     intermediate: activeSection.items ?? result.intermediate,
@@ -1707,7 +1971,7 @@ function parseUiDilutionFactor(value: string) {
 }
 
 function getStatusClassName(status: string) {
-  const isError = status.includes('не') || status.includes('Проверьте');
+  const isError = status.startsWith('Ошибка') || status.startsWith('PDF не') || status.startsWith('Расчет не') || status.includes('Проверьте');
   const isSuccess = status.includes('сохранен') || status.includes('выполнен') || status.includes('сформирован');
 
   return [

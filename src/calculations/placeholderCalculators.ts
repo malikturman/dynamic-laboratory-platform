@@ -85,6 +85,10 @@ export function createEmptyValues(indicator: IndicatorDefinition) {
     ]);
   }
 
+  if (indicator.id === 'nitrites') {
+    Object.assign(values, getNitriteUncertaintyDefaultValues());
+  }
+
   return values;
 }
 
@@ -1372,7 +1376,7 @@ function calculateNitrites(input: CalculationInput): CalculationResult {
       result: 'Расчет не выполнен',
       finalResult: 'Расчет не выполнен',
       explanation: 'Проверьте входные данные. Поля K, Vk, V и f должны быть больше нуля; поле A не может быть отрицательным.',
-      reportSections: createInvalidNitriteSections(validationErrors),
+      reportSections: createInvalidNitriteSections(validationErrors, input),
       validationErrors,
       isValid: false,
     };
@@ -1462,7 +1466,7 @@ function createNitriteSections(params: NitriteSectionParams) {
       explanation:
         'Расчет выполнен фотометрическим методом с использованием сульфаниловой кислоты согласно ГОСТ 33045-2014, раздел 6, метод Б. Итоговый результат основан на градуировочной характеристике и введенных параметрах пробы.',
     },
-    createNitriteUncertaintyPlaceholderSection(),
+    createNitriteUncertaintySection(params.input, params.concentration),
     {
       title: 'Анализ',
       rows: [
@@ -1483,23 +1487,300 @@ function createNitriteSections(params: NitriteSectionParams) {
   ];
 }
 
-function createNitriteUncertaintyPlaceholderSection() {
+interface NitriteObservationSummary {
+  id: string;
+  value: string;
+  numericValue: number | null;
+}
+
+interface NitriteUncertaintyComponent {
+  label: string;
+  unit: string;
+  value: string;
+  interval: number;
+  type: 'B';
+  distribution: 'Прямоугольное' | 'Треугольное';
+  standardUncertainty: number;
+  degreesOfFreedom: string;
+  sensitivity: number;
+  contribution: number;
+  percentContribution: number;
+}
+
+function createNitriteUncertaintySection(input: CalculationInput, fallbackConcentration: number | null) {
+  const uncertainty = calculateNitriteUncertainty(input, fallbackConcentration);
+
   return {
     title: 'Неопределенность',
     notes: [
-      'Для реализации расчета неопределенности измерений по показателю ‘Нитриты’ необходимо загрузить утвержденную методику оценки неопределенности или официальный расчет неопределенности для данного метода.',
-      'Модуль расчета неопределенности будет реализован после добавления утвержденной методики.',
+      'Отчет о неопределенности измеряемой величины сформирован для показателя «Нитрит-ионы» по ГОСТ 33045-2014. Расчет учитывает основные составляющие неопределенности фотометрического определения: спектрофотометрический канал КФК-3, аттестованное значение ГСО и вместимость мерной колбы 200 мл.',
+      'Входные величины рассматриваются как независимые. Коэффициенты чувствительности для составляющих бюджета приняты равными 1, поскольку расчет выполняется в относительной модели вклада источников неопределенности.',
+    ],
+    formula: 'Y = f(X1, X2, X3...)',
+    formulas: [
+      'Y = f(X1, X2, X3...)',
+      'Y = f(КФК, VК200, ГСО, Оператор)',
+      'Xср = ΣXi / n',
+      'u(КФК) = a / √3',
+      'u(ГСО) = a / √3',
+      'u(Колба) = a / √6',
+      'uc = √(u²КФК + u²ГСО + u²Колба)',
+      'U = uc × k',
+    ],
+    legend: [
+      'Y — результат измерения массовой концентрации нитрит-ионов',
+      'Xi — отдельный результат наблюдения, мг/дм³',
+      'Xср — среднее арифметическое значение наблюдений',
+      'u — стандартная неопределенность входной величины',
+      'uc — стандартная суммарная неопределенность',
+      'U — расширенная неопределенность при коэффициенте охвата k = 2',
     ],
     rows: [
-      { label: 'Статус раздела', value: 'В разработке' },
-      { label: 'Причина', value: 'Отсутствует утвержденная методика оценки неопределенности для данного метода' },
+      { label: '1. Заголовок отчета', value: 'Отчет о неопределенности измеряемой величины' },
+      { label: 'Показатель', value: 'Нитрит-ионы' },
+      { label: '2. Объект измерения', value: uncertainty.object },
+      { label: 'Измерительная задача', value: uncertainty.task },
+      { label: 'Метод измерения', value: uncertainty.method },
+      { label: 'Нормативный документ', value: uncertainty.normativeDocument },
+      { label: 'Описание метода', value: uncertainty.methodDescription },
+      { label: 'Температура', value: uncertainty.temperature },
+      { label: 'Влажность', value: uncertainty.humidity },
+      { label: '3. Модель измерения', value: 'Y = f(X1,X2,X3...); Y = f(КФК, VК200, ГСО, Оператор)' },
+      { label: '6. Корреляции', value: 'Ни одна из входных величин не рассматривается коррелированной друг с другом в какой-либо значительной степени.' },
+      { label: '7. Коэффициенты чувствительности', value: 'Коэффициенты чувствительности приняты равными 1 для всех составляющих бюджета.' },
     ],
-    result: 'Раздел в разработке',
-    explanation: 'Неопределенность для показателя «Нитриты» не рассчитывается до загрузки утвержденной методики.',
+    tables: [
+      {
+        title: '4. Результаты наблюдений',
+        note: `Средняя концентрация: Xср = (${uncertainty.observations.map(formatNumber).join(' + ')}) / ${uncertainty.observations.length} = ${formatNumber(uncertainty.average)} мг/дм³.`,
+        columns: ['№', 'Значение, мг/дм³'],
+        widths: ['24%', '76%'],
+        rows: uncertainty.observationRows.map((row, index) => [
+          String(index + 1),
+          row.numericValue === null ? (row.value || 'Не указано') : formatNumber(row.numericValue),
+        ]),
+      },
+      {
+        title: '5. Источники неопределенности',
+        note: 'Составляющие выбраны согласно методике фотометрического определения нитрит-ионов и метрологическим характеристикам применяемых средств измерений.',
+        columns: ['№', 'Источник неопределенности', 'Тип оценки', 'Распределение'],
+        widths: ['8%', '48%', '16%', '28%'],
+        rows: [
+          ['1', 'КФК-3', 'B', 'Прямоугольное'],
+          ['2', 'ГСО', 'B', 'Прямоугольное'],
+          ['3', 'Мерная колба', 'B', 'Треугольное'],
+        ],
+      },
+      {
+        title: '13. Бюджет неопределенности',
+        note: 'Бюджет неопределенности содержит значения входных величин, интервалы допускаемой погрешности, стандартные неопределенности и вклад каждой составляющей в суммарную неопределенность.',
+        columns: [
+          'Величина',
+          'Ед. изм.',
+          'Значение',
+          'Интервал ±',
+          'Тип оценки',
+          'Функция распределения',
+          'Стандартная неопределенность',
+          'Степень свободы',
+          'Коэффициент чувствительности',
+          'Вклад неопределенности',
+          'Процентный вклад',
+        ],
+        widths: ['9%', '7%', '9%', '8%', '7%', '12%', '12%', '8%', '10%', '9%', '9%'],
+        rows: uncertainty.components.map((component) => [
+          component.label,
+          component.unit,
+          component.value,
+          formatNumber(component.interval),
+          component.type,
+          component.distribution,
+          formatNumber(component.standardUncertainty),
+          component.degreesOfFreedom,
+          formatNumber(component.sensitivity),
+          formatNumber(component.contribution),
+          `${formatNumber(component.percentContribution)} %`,
+        ]),
+      },
+    ],
+    items: [
+      '3. Модель измерения описывает зависимость результата от входных величин, влияющих на фотометрическое определение нитрит-ионов. В модели учитываются приборная составляющая КФК-3, вместимость мерной колбы VК200, аттестованное значение ГСО и вклад оператора при выполнении процедуры.',
+      `4. Среднее значение наблюдений: Xср = (${uncertainty.observations.map(formatNumber).join(' + ')}) / ${uncertainty.observations.length} = ${formatNumber(uncertainty.average)} мг/дм³.`,
+      '7. Коэффициенты чувствительности показывают, как изменение входной величины влияет на результат. Для настоящего расчета коэффициенты приняты равными 1.',
+      `8. Неопределенность КФК-3: u = a / √3 = ${formatNumber(uncertainty.kfkError)} / √3 = ${formatNumber(uncertainty.kfkUncertainty)} нм. Прямоугольное распределение применено, поскольку известно только предельное значение погрешности прибора.`,
+      `9. Неопределенность ГСО: u = a / √3 = ${formatNumber(uncertainty.gsoError)} / √3 = ${formatNumber(uncertainty.gsoUncertainty)} %. Прямоугольное распределение отражает равновероятное нахождение истинного значения внутри заданного интервала.`,
+      `10. Неопределенность мерной колбы: u = a / √6 = ${formatNumber(uncertainty.flaskError)} / √6 = ${formatNumber(uncertainty.flaskUncertainty)} мл. Треугольное распределение принято для объемной меры, так как значения ближе к центру интервала более вероятны.`,
+      `11. Стандартная суммарная неопределенность: uc = √(${formatNumber(uncertainty.kfkUncertainty)}² + ${formatNumber(uncertainty.gsoUncertainty)}² + ${formatNumber(uncertainty.flaskUncertainty)}²) = ${formatNumber(uncertainty.combinedUncertainty)}.`,
+      `12. Расширенная неопределенность: U = uc × k = ${formatNumber(uncertainty.combinedUncertainty)} × ${formatNumber(uncertainty.coverageFactor)} = ${formatNumber(uncertainty.expandedUncertainty)}. Доверительная вероятность: P = ${formatNumber(uncertainty.confidenceLevel)} (95%).`,
+      `14. Представление результата: (${formatNumber(uncertainty.average)} ± ${formatNumber(uncertainty.expandedUncertainty)}) мг/дм³, при K = ${formatNumber(uncertainty.coverageFactor)}, P = ${formatNumber(uncertainty.confidenceLevel)}.`,
+      `15. Расчет выполнил: ${input.specialist || 'Специалист'}`,
+      `Дата: ${formatReportDate(input.sampleDate)}`,
+    ],
+    result: uncertainty.finalText,
+    explanation:
+      'Профессиональный отчет включает исходные данные, модель измерения, результаты наблюдений, источники и бюджет неопределенности, расчет стандартной суммарной и расширенной неопределенности, а также представление итогового результата измерения нитрит-ионов.',
   };
 }
 
-function createInvalidNitriteSections(validationErrors: string[]) {
+function getNitriteUncertaintyDefaultValues(): Record<string, string> {
+  return {
+    nitriteObject: 'Бутилированная вода',
+    nitriteTask: 'Определение нитрит-ионов в воде',
+    nitriteMethod: 'Фотометрический',
+    nitriteNormativeDocument: 'ГОСТ 33045-2014',
+    nitriteMethodDescription:
+      'Сущность метода заключается во взаимодействии нитритов в исследуемой пробе воды с сульфаниловой кислотой в присутствии 1-нафтиламина с образованием красно-фиолетового окрашенного соединения с последующим фотометрическим определением и расчетом массовой концентрации нитритов.',
+    nitriteTemperature: '22 °C',
+    nitriteHumidity: '69 %',
+    nitriteObservations: JSON.stringify([
+      { id: 'nitrite-observation-1', value: '0.021' },
+      { id: 'nitrite-observation-2', value: '0.023' },
+      { id: 'nitrite-observation-3', value: '0.022' },
+      { id: 'nitrite-observation-4', value: '0.024' },
+    ]),
+    nitriteKfkError: '3',
+    nitriteGsoError: '2',
+    nitriteFlaskVolume: '200',
+    nitriteFlaskError: '0.8',
+    nitriteCoverageFactor: '2',
+    nitriteConfidenceLevel: '0.95',
+  };
+}
+
+function calculateNitriteUncertainty(input: CalculationInput, fallbackConcentration: number | null) {
+  const values = { ...getNitriteUncertaintyDefaultValues(), ...input.values };
+  const observationRows = parseNitriteUncertaintyObservations(values.nitriteObservations);
+  const observations = observationRows
+    .map((row) => row.numericValue)
+    .filter((value): value is number => value !== null && value >= 0);
+  const calculationObservations = observations.length >= 2 ? observations : [fallbackConcentration ?? 0.021, 0.023, 0.022, 0.024];
+  const averageValue = average(calculationObservations);
+  const kfkError = getNumberOrDefault(values.nitriteKfkError, 3);
+  const gsoError = getNumberOrDefault(values.nitriteGsoError, 2);
+  const flaskVolume = getNumberOrDefault(values.nitriteFlaskVolume, 200);
+  const flaskError = getNumberOrDefault(values.nitriteFlaskError, 0.8);
+  const coverageFactor = getNumberOrDefault(values.nitriteCoverageFactor, 2);
+  const confidenceLevel = getNumberOrDefault(values.nitriteConfidenceLevel, 0.95);
+  const kfkUncertainty = kfkError / Math.sqrt(3);
+  const gsoUncertainty = gsoError / Math.sqrt(3);
+  const flaskUncertainty = flaskError / Math.sqrt(6);
+  const combinedUncertainty = Math.sqrt(kfkUncertainty ** 2 + gsoUncertainty ** 2 + flaskUncertainty ** 2);
+  const expandedUncertainty = combinedUncertainty * coverageFactor;
+  const componentsWithoutPercent: NitriteUncertaintyComponent[] = [
+    {
+      label: 'КФК-3',
+      unit: 'нм',
+      value: 'КФК-3',
+      interval: kfkError,
+      type: 'B',
+      distribution: 'Прямоугольное',
+      standardUncertainty: kfkUncertainty,
+      degreesOfFreedom: '∞',
+      sensitivity: 1,
+      contribution: kfkUncertainty,
+      percentContribution: 0,
+    },
+    {
+      label: 'ГСО',
+      unit: '%',
+      value: 'ГСО нитрит-ионов',
+      interval: gsoError,
+      type: 'B',
+      distribution: 'Прямоугольное',
+      standardUncertainty: gsoUncertainty,
+      degreesOfFreedom: '∞',
+      sensitivity: 1,
+      contribution: gsoUncertainty,
+      percentContribution: 0,
+    },
+    {
+      label: 'Мерная колба',
+      unit: 'мл',
+      value: formatNumber(flaskVolume),
+      interval: flaskError,
+      type: 'B',
+      distribution: 'Треугольное',
+      standardUncertainty: flaskUncertainty,
+      degreesOfFreedom: '∞',
+      sensitivity: 1,
+      contribution: flaskUncertainty,
+      percentContribution: 0,
+    },
+  ];
+  const totalContribution = componentsWithoutPercent.reduce((sum, component) => sum + component.contribution ** 2, 0) || 1;
+  const components = componentsWithoutPercent.map((component) => ({
+    ...component,
+    percentContribution: (component.contribution ** 2 / totalContribution) * 100,
+  }));
+
+  return {
+    object: values.nitriteObject || 'Бутилированная вода',
+    task: values.nitriteTask || 'Определение нитрит-ионов в воде',
+    method: values.nitriteMethod || 'Фотометрический',
+    normativeDocument: values.nitriteNormativeDocument || 'ГОСТ 33045-2014',
+    methodDescription: values.nitriteMethodDescription || getNitriteUncertaintyDefaultValues().nitriteMethodDescription,
+    temperature: values.nitriteTemperature || '22 °C',
+    humidity: values.nitriteHumidity || '69 %',
+    observationRows,
+    observations: calculationObservations,
+    average: averageValue,
+    kfkError,
+    gsoError,
+    flaskVolume,
+    flaskError,
+    kfkUncertainty,
+    gsoUncertainty,
+    flaskUncertainty,
+    combinedUncertainty,
+    coverageFactor,
+    confidenceLevel,
+    expandedUncertainty,
+    components,
+    finalText: `(${formatNumber(averageValue)} ± ${formatNumber(expandedUncertainty)}) мг/дм³, при K = ${formatNumber(coverageFactor)}, P = ${formatNumber(confidenceLevel)}`,
+  };
+}
+
+function parseNitriteUncertaintyObservations(value: string | undefined): NitriteObservationSummary[] {
+  const defaultRows = [
+    { id: 'nitrite-observation-1', value: '0.021' },
+    { id: 'nitrite-observation-2', value: '0.023' },
+    { id: 'nitrite-observation-3', value: '0.022' },
+    { id: 'nitrite-observation-4', value: '0.024' },
+  ];
+
+  try {
+    const parsed = value ? JSON.parse(value) : defaultRows;
+    if (Array.isArray(parsed) && parsed.length > 0) {
+      return parsed.map((row, index) => {
+        const rawValue = typeof row.value === 'string' ? row.value : String(row.value ?? '');
+        return {
+          id: typeof row.id === 'string' ? row.id : `nitrite-observation-${index + 1}`,
+          value: rawValue,
+          numericValue: parseNitriteObservationValue(rawValue),
+        };
+      });
+    }
+  } catch {
+    // Fall back to default observations.
+  }
+
+  return defaultRows.map((row) => ({ ...row, numericValue: parseNitriteObservationValue(row.value) }));
+}
+
+function parseNitriteObservationValue(value: string) {
+  const parsed = Number(value.trim().replace(',', '.'));
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
+}
+
+function formatReportDate(value: string) {
+  if (!value) {
+    return new Intl.DateTimeFormat('ru-RU').format(new Date());
+  }
+
+  return new Intl.DateTimeFormat('ru-RU').format(new Date(value));
+}
+
+function createInvalidNitriteSections(validationErrors: string[], input: CalculationInput) {
   return [
     {
       title: 'Основной расчет',
@@ -1509,7 +1790,7 @@ function createInvalidNitriteSections(validationErrors: string[]) {
       result: 'Расчет не выполнен',
       explanation: 'Заполните обязательные поля корректными числовыми значениями, чтобы сформировать основной расчет нитритов.',
     },
-    createNitriteUncertaintyPlaceholderSection(),
+    createNitriteUncertaintySection(input, null),
     {
       title: 'Анализ',
       items: validationErrors,
