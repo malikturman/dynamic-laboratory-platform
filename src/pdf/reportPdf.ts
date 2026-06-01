@@ -355,24 +355,18 @@ function getFontVirtualFileSystem(pdfFonts: Record<string, string> | { pdfMake?:
   return pdfFonts as Record<string, string>;
 }
 
-function createPdfBlob(pdfDocument: { getBlob: { (): Promise<Blob>; (callback: (blob: Blob) => void): void } }) {
-  try {
-    const maybePromise = pdfDocument.getBlob();
-
-    if (maybePromise instanceof Promise) {
-      return maybePromise;
+function createPdfBlob(pdfDocument: { getBlob: (callback: (blob: Blob) => void) => void }) {
+  return new Promise<Blob>((resolve, reject) => {
+    try {
+      pdfDocument.getBlob((blob) => resolve(blob));
+    } catch (error) {
+      reject(error);
     }
-  } catch {
-    // pdfmake 0.2 uses callback-only getBlob and throws when called without one.
-  }
-
-  return new Promise<Blob>((resolve) => {
-    pdfDocument.getBlob((blob) => resolve(blob));
   });
 }
 
 async function assertUsablePdfBlob(blob: Blob) {
-  if (!blob || blob.size < 1000 || blob.type !== 'application/pdf') {
+  if (!blob || blob.size < 1000) {
     throw new Error('PDF_EMPTY_OR_INVALID');
   }
 
