@@ -72,18 +72,6 @@ export interface CalculationReportTable {
   widths?: string[];
 }
 
-/*
- * TODO(sample-reports): introduce a sample entity when combined reports are implemented.
- * Planned shape:
- * - sampleId: visible sample number, for example "СГ-001"
- * - laboratoryId/laboratoryName
- * - date
- * - specialist/user ownership fields
- * - calculations[]: SavedCalculation references or embedded calculation snapshots
- *
- * Keep SavedCalculation as the single-calculation report source so old PDF reports
- * and history rows continue to work during the migration.
- */
 export interface SavedCalculation {
   id: string;
   date: string;

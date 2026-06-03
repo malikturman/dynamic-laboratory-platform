@@ -85,11 +85,6 @@ export function CalculationPage() {
   const [activeKmafanmTab, setActiveKmafanmTab] = useState<KmafanmTab>('main');
   const [activeHardnessTab, setActiveHardnessTab] = useState<HardnessTab>('main');
   const [activeNitriteTab, setActiveNitriteTab] = useState<NitriteTab>('main');
-  /*
-   * TODO(sample-reports): add "create/select sample" UI before indicator input.
-   * Saving should attach the calculation to selected sampleId and then update
-   * the future sample page without changing the indicator calculation function.
-   */
 
   useEffect(() => {
     if (!indicator) {
@@ -402,42 +397,36 @@ export function CalculationPage() {
               </div>
             ) : null}
 
-            {((!isKmafanm && !isHardness && !isNitrites) ||
-              (isKmafanm && activeKmafanmTab === 'main') ||
-              (isHardness && activeHardnessTab === 'main') ||
-              (isNitrites && activeNitriteTab === 'main')) ? (
-              <>
-                <label className="block">
-                  <span className="mb-1.5 block text-sm font-medium text-slate-700">Номер образца</span>
-                  <input
-                    value={sampleNumber}
-                    onChange={(event) => setSampleNumber(event.target.value)}
-                    className="focus-ring w-full rounded border border-laboratory-line bg-white px-3 py-2.5 text-laboratory-ink"
-                    placeholder="Например, Б-2026-001"
-                  />
-                </label>
+            <label className="block">
+              <span className="mb-1.5 block text-sm font-medium text-slate-700">Номер пробы</span>
+              <input
+                value={sampleNumber}
+                onChange={(event) => setSampleNumber(event.target.value)}
+                className="focus-ring w-full rounded border border-laboratory-line bg-white px-3 py-2.5 text-laboratory-ink"
+                placeholder="Например, СГ-001"
+                required
+              />
+            </label>
 
-                <label className="block">
-                  <span className="mb-1.5 block text-sm font-medium text-slate-700">Дата</span>
-                  <input
-                    type="date"
-                    value={sampleDate}
-                    onChange={(event) => setSampleDate(event.target.value)}
-                    className="focus-ring w-full rounded border border-laboratory-line bg-white px-3 py-2.5 text-laboratory-ink"
-                  />
-                </label>
+            <label className="block">
+              <span className="mb-1.5 block text-sm font-medium text-slate-700">Дата</span>
+              <input
+                type="date"
+                value={sampleDate}
+                onChange={(event) => setSampleDate(event.target.value)}
+                className="focus-ring w-full rounded border border-laboratory-line bg-white px-3 py-2.5 text-laboratory-ink"
+              />
+            </label>
 
-                <label className="block">
-                  <span className="mb-1.5 block text-sm font-medium text-slate-700">Специалист</span>
-                  <input
-                    value={specialist}
-                    onChange={(event) => setSpecialist(event.target.value)}
-                    className="focus-ring w-full rounded border border-laboratory-line bg-white px-3 py-2.5 text-laboratory-ink"
-                    placeholder="ФИО специалиста"
-                  />
-                </label>
-              </>
-            ) : null}
+            <label className="block">
+              <span className="mb-1.5 block text-sm font-medium text-slate-700">Специалист</span>
+              <input
+                value={specialist}
+                onChange={(event) => setSpecialist(event.target.value)}
+                className="focus-ring w-full rounded border border-laboratory-line bg-white px-3 py-2.5 text-laboratory-ink"
+                placeholder="ФИО специалиста"
+              />
+            </label>
 
             {isKmafanm && activeKmafanmTab === 'analysis' ? (
               <div className="rounded border border-blue-100 bg-blue-50 px-4 py-3 text-sm leading-6 text-laboratory-navy">

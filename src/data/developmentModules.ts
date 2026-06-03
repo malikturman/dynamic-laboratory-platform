@@ -15,7 +15,7 @@ export const developmentModules = [
   },
   {
     id: 'method-validation',
-    title: 'Валидация методов исследования',
+    title: 'Валидация и верификация методов исследования',
     description: 'Модуль валидации и оценки характеристик методов исследования.',
     icon: ShieldCheck,
   },

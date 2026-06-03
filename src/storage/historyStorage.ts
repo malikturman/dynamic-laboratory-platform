@@ -19,11 +19,6 @@ export function getSavedCalculations(): SavedCalculation[] {
 }
 
 export function saveCalculation(calculation: SavedCalculation) {
-  /*
-   * TODO(sample-reports): when sample storage exists, save should optionally
-   * attach this calculation to the selected sampleId while preserving this
-   * standalone history entry for existing single-calculation reports.
-   */
   const history = getSavedCalculations();
   window.localStorage.setItem(STORAGE_KEY, JSON.stringify([calculation, ...history]));
 }

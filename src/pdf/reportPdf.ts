@@ -7,20 +7,39 @@ interface GenerateCalculationPdfReportParams {
   result: CalculationResult;
 }
 
+export interface SamplePdfReportItem {
+  indicatorName: string;
+  result: string;
+  uncertainty: string;
+  method: string;
+  inputRows: Array<{ label: string; value: string; unit?: string }>;
+}
+
+interface GenerateSamplePdfReportParams {
+  sampleNumber: string;
+  date: string;
+  specialist: string;
+  items: SamplePdfReportItem[];
+}
+
 export async function generateCalculationPdfReport({
   laboratoryName,
   indicator,
   input,
   result,
 }: GenerateCalculationPdfReportParams) {
-  /*
-   * TODO(sample-reports): keep this single-calculation PDF generator as-is.
-   * Add a separate generateSamplePdfReport(sample) entry point for combined
-   * reports with sample metadata, indicator summary table, and per-indicator
-   * calculation detail sections.
-   */
   const documentDefinition = createReportDocument({ laboratoryName, indicator, input, result });
   return downloadPdf(documentDefinition, 'lab-calculation-report.pdf');
+}
+
+export async function generateSamplePdfReport({
+  sampleNumber,
+  date,
+  specialist,
+  items,
+}: GenerateSamplePdfReportParams) {
+  const documentDefinition = createSampleReportDocument({ sampleNumber, date, specialist, items });
+  return downloadPdf(documentDefinition, `sample-report-${sanitizeFileName(sampleNumber)}.pdf`);
 }
 
 function createReportDocument({
@@ -153,6 +172,155 @@ function createReportDocument({
   };
 
   return documentDefinition;
+}
+
+function createSampleReportDocument({
+  sampleNumber,
+  date,
+  specialist,
+  items,
+}: GenerateSamplePdfReportParams) {
+  const documentDefinition = {
+    pageSize: 'A4',
+    pageMargins: [38, 42, 38, 50],
+    defaultStyle: {
+      font: 'Roboto',
+      fontSize: 10,
+      color: '#172033',
+      lineHeight: 1.18,
+    },
+    footer: (currentPage: number, pageCount: number) => ({
+      margin: [40, 0, 40, 24],
+      columns: [
+        {
+          text: 'Цифровая система автоматизации лабораторных расчетов',
+          color: '#5f6f84',
+          fontSize: 8,
+        },
+        {
+          text: `${currentPage} / ${pageCount}`,
+          alignment: 'right',
+          color: '#5f6f84',
+          fontSize: 8,
+        },
+      ],
+    }),
+    styles: {
+      title: {
+        fontSize: 20,
+        bold: true,
+        color: '#0f2f57',
+        margin: [0, 0, 0, 4],
+      },
+      appName: {
+        fontSize: 10,
+        color: '#1f5f99',
+        bold: true,
+      },
+      appSubtitle: {
+        fontSize: 9,
+        color: '#5f6f84',
+        margin: [0, 3, 0, 0],
+      },
+      sectionHeader: {
+        bold: true,
+        color: '#ffffff',
+        fillColor: '#0f2f57',
+        margin: [0, 12, 0, 0],
+      },
+      subsectionHeader: {
+        fontSize: 11,
+        bold: true,
+        color: '#0f2f57',
+        margin: [0, 10, 0, 5],
+      },
+      result: {
+        fontSize: 12,
+        bold: true,
+        color: '#0f2f57',
+      },
+      muted: {
+        color: '#5f6f84',
+      },
+    },
+    content: [
+      {
+        stack: [
+          { text: 'Сводный отчет по пробе', style: 'title' },
+          { text: 'Dynamic Laboratory Calculator', style: 'appName' },
+          {
+            text: 'Цифровая система автоматизации лабораторных расчетов',
+            style: 'appSubtitle',
+          },
+        ],
+        margin: [0, 0, 0, 18],
+      },
+
+      sectionTitle('Сведения о пробе'),
+      {
+        table: {
+          widths: ['32%', '*'],
+          body: [
+            tableRow('Номер пробы', sampleNumber || 'Не указан'),
+            tableRow('Дата формирования', formatDate(date)),
+            tableRow('Специалист', specialist || 'Не указан'),
+          ],
+        },
+        layout: borderedLayout,
+      },
+
+      sectionTitle('Сводная таблица'),
+      {
+        table: {
+          headerRows: 1,
+          widths: ['24%', '25%', '20%', '*'],
+          body: [
+            ['Показатель', 'Результат', 'Неопределенность', 'Метод'].map(tableHeaderCell),
+            ...items.map((item) => [
+              tableCell(item.indicatorName),
+              tableCell(item.result || 'Не указано'),
+              tableCell(item.uncertainty || 'Не указано'),
+              tableCell(item.method || 'Не указано'),
+            ]),
+          ],
+        },
+        layout: borderedLayout,
+        margin: [0, 0, 0, 8],
+      },
+
+      ...items.flatMap((item, index) => createSampleAppendixContent(item, index + 1)),
+    ],
+  };
+
+  return documentDefinition;
+}
+
+function createSampleAppendixContent(item: SamplePdfReportItem, sectionNumber: number) {
+  const inputRows = item.inputRows.length
+    ? item.inputRows
+    : [{ label: 'Исходные данные', value: 'Не указаны' }];
+
+  return [
+    {
+      ...sectionTitle(`Раздел ${sectionNumber}. ${item.indicatorName}`),
+      pageBreak: sectionNumber === 1 ? undefined : 'before',
+    },
+    resultBox(item.result || 'Не указано'),
+    { text: 'Основные входные данные', style: 'subsectionHeader' },
+    {
+      table: {
+        widths: ['42%', '30%', '*'],
+        body: [
+          ['Параметр', 'Значение', 'Единица'].map(tableHeaderCell),
+          ...inputRows.map((row) => [tableCell(row.label), tableCell(row.value || 'Не указано'), tableCell(row.unit || '-')]),
+        ],
+      },
+      layout: borderedLayout,
+      margin: [0, 4, 0, 8],
+    },
+    { text: 'Неопределенность', style: 'subsectionHeader' },
+    resultBox(item.uncertainty || 'Не указано'),
+  ];
 }
 
 function sectionTitle(text: string) {
@@ -386,4 +554,9 @@ function formatDate(value: string) {
 
 function formatInputValue(value: string | undefined) {
   return value?.trim() ? value : 'Не указано';
+}
+
+function sanitizeFileName(value: string) {
+  const normalized = value.trim().replace(/[\\/:*?"<>|]+/g, '-');
+  return normalized || 'sample';
 }

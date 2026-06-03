@@ -63,7 +63,6 @@ export default function App() {
           </ProtectedRoute>
         }
       />
-      {/* TODO(sample-reports): add protected /samples/:sampleId route for the combined sample page. */}
       <Route
         path="/admin"
         element={

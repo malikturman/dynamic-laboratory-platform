@@ -263,7 +263,7 @@ function calculateKmafanm(input: CalculationInput): CalculationResult {
   const coverageFactor = parsePositiveNumber(input.values.coverageFactor, 'Коэффициент охвата k');
 
   const validationErrors = [
-    validateRequired(input.sampleNumber, 'Укажите номер образца.'),
+    validateRequired(input.sampleNumber, 'Укажите номер пробы.'),
     validateRequired(input.sampleDate, 'Укажите дату расчета.'),
     validateRequired(input.specialist, 'Укажите специалиста.'),
     validateRequired(input.values.object ?? '', 'Укажите объект исследования.'),
@@ -775,7 +775,7 @@ function calculateHardness(input: CalculationInput): CalculationResult {
   const vSample = parsePositiveNumber(input.values.vpr, 'Vпр');
 
   const validationErrors = [
-    validateRequired(input.sampleNumber, 'Укажите номер образца.'),
+    validateRequired(input.sampleNumber, 'Укажите номер пробы.'),
     validateRequired(input.sampleDate, 'Укажите дату расчета.'),
     validateRequired(input.specialist, 'Укажите специалиста.'),
     ctr.error,
@@ -1356,7 +1356,7 @@ function calculateNitrites(input: CalculationInput): CalculationResult {
   const f = parsedF.value;
 
   const validationErrors = [
-    validateRequired(input.sampleNumber, 'Укажите номер образца.'),
+    validateRequired(input.sampleNumber, 'Укажите номер пробы.'),
     validateRequired(input.sampleDate, 'Укажите дату расчета.'),
     validateRequired(input.specialist, 'Укажите специалиста.'),
     k.error,
@@ -1438,7 +1438,7 @@ function createNitriteSections(params: NitriteSectionParams) {
       ],
       legend: getNitriteLegend(),
       rows: [
-        { label: 'Номер образца', value: params.input.sampleNumber || 'Не указан' },
+        { label: 'Номер пробы', value: params.input.sampleNumber || 'Не указан' },
         { label: 'Дата', value: params.input.sampleDate || 'Не указана' },
         { label: 'Специалист', value: params.input.specialist || 'Не указан' },
         { label: 'ГОСТ / Методика', value: nitriteMethod },
