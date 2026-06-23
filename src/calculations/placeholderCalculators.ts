@@ -1004,7 +1004,8 @@ function createHardnessUncertaintySection(uncertainty: HardnessUncertaintyResult
       'uA = s / Xср',
       'u = a / √6 для треугольного распределения',
       'u = a / √3 для прямоугольного распределения',
-      'uB = √(u²бюр + u²пип + u²мк + u²цил + u²весы + u²трБ)',
+      'uотн = uабс / Xref',
+      'uB = √(u²отн.бюр + u²отн.пип + u²отн.мк + u²отн.цил + u²отн.весы + u²отн.трБ)',
       'uc = √(uA² + uB²)',
       'U = k × uc',
     ],
@@ -1058,7 +1059,7 @@ function createHardnessUncertaintySection(uncertainty: HardnessUncertaintyResult
       },
       {
         title: '13. Бюджет неопределенности',
-        note: 'Бюджет неопределенности показывает вклад каждой составляющей в суммарную неопределенность результата и позволяет оценить наиболее значимые источники влияния.',
+        note: 'Бюджет неопределенности показывает вклад каждой составляющей в суммарную неопределенность результата. Для объемных средств измерений абсолютная стандартная неопределенность приводится к относительной через соответствующий опорный объем метода, а не через значение жесткости.',
         columns: [
           'Величина',
           'Ед. изм.',
@@ -1097,8 +1098,8 @@ function createHardnessUncertaintySection(uncertainty: HardnessUncertaintyResult
         .filter((component) => component.type === 'B')
         .map((component) =>
           component.distribution === 'Прямоугольное'
-            ? `${component.label}: u = a / √3 = ${formatNumber(component.interval)} / √3 = ${formatNumber(component.standardUncertainty)}`
-            : `${component.label}: u = a / √6 = ${formatNumber(component.interval)} / √6 = ${formatNumber(component.standardUncertainty)}`,
+            ? `${component.label}: uабс = a / √3 = ${formatNumber(component.interval)} / √3; uотн = uабс / ${formatNumber(component.value)} = ${formatNumber(component.standardUncertainty)}`
+            : `${component.label}: uабс = a / √6 = ${formatNumber(component.interval)} / √6; uотн = uабс / ${formatNumber(component.value)} = ${formatNumber(component.standardUncertainty)}`,
         ),
       'Суммарная неопределенность по типу B формируется из относительных стандартных неопределенностей всех систематических источников.',
       `10. Суммарная неопределенность по типу B: uB = √(${uncertainty.components
@@ -1168,6 +1169,23 @@ function parsePositiveObservationValue(value: string) {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
 }
 
+function getHardnessReferenceVolumes(values: Record<string, string>) {
+  const vtr1 = parseNumber(values.vtr1 ?? '');
+  const vtr2 = parseNumber(values.vtr2 ?? '');
+  const titrantVolumes = [vtr1, vtr2].filter((value): value is number => value !== null && value > 0);
+  const titrantVolume = titrantVolumes.length ? average(titrantVolumes) : 4.25;
+  const sampleVolume = getNumberOrDefault(values.vpr, 100);
+  const correctionVolume = getNumberOrDefault(values.v, 10);
+
+  return {
+    titrantVolume,
+    sampleVolume,
+    correctionVolume,
+    flaskVolume: correctionVolume,
+    scalesMass: 1000,
+  };
+}
+
 function calculateHardnessUncertainty(input: CalculationInput, fallbackHardness: number): HardnessUncertaintyResult {
   const values = input.values;
   const observationRows = parseHardnessUncertaintyObservations(values);
@@ -1189,13 +1207,14 @@ function calculateHardnessUncertainty(input: CalculationInput, fallbackHardness:
     scales: getNumberOrDefault(values.hardnessScales, 0.5),
     trilon: getNumberOrDefault(values.hardnessTrilon, 0.3),
   };
+  const referenceVolumes = getHardnessReferenceVolumes(values);
   const typeBBase = [
-    createTypeBComponent('uбюр', 'Бюретка', 'мл', intervals.burette, 'Треугольное', referenceValue),
-    createTypeBComponent('uпип', 'Пипетка', 'мл', intervals.pipette, 'Треугольное', referenceValue),
-    createTypeBComponent('uмк', 'Мерная колба', 'мл', intervals.flask, 'Треугольное', referenceValue),
-    createTypeBComponent('uцил', 'Цилиндр мерный', 'мл', intervals.cylinder, 'Треугольное', referenceValue),
-    createTypeBComponent('uвесы', 'Весы лабораторные', 'мг', intervals.scales, 'Прямоугольное', referenceValue),
-    createTypeBComponent('uтрБ', 'Раствор Трилона Б', 'мл', intervals.trilon, 'Треугольное', referenceValue),
+    createTypeBComponent('uбюр', 'Бюретка', 'мл', intervals.burette, 'Треугольное', referenceVolumes.titrantVolume),
+    createTypeBComponent('uпип', 'Пипетка', 'мл', intervals.pipette, 'Треугольное', referenceVolumes.sampleVolume),
+    createTypeBComponent('uмк', 'Мерная колба', 'мл', intervals.flask, 'Треугольное', referenceVolumes.flaskVolume),
+    createTypeBComponent('uцил', 'Цилиндр мерный', 'мл', intervals.cylinder, 'Треугольное', referenceVolumes.sampleVolume),
+    createTypeBComponent('uвесы', 'Весы лабораторные', 'мг', intervals.scales, 'Прямоугольное', referenceVolumes.scalesMass),
+    createTypeBComponent('uтрБ', 'Раствор Трилона Б', 'мл', intervals.trilon, 'Треугольное', referenceVolumes.correctionVolume),
   ];
   const typeBUncertainty = Math.sqrt(typeBBase.reduce((sum, component) => sum + component.standardUncertainty ** 2, 0));
   const combinedUncertainty = Math.sqrt(typeAUncertainty ** 2 + typeBUncertainty ** 2);
@@ -1513,26 +1532,27 @@ function createNitriteUncertaintySection(input: CalculationInput, fallbackConcen
   return {
     title: 'Неопределенность',
     notes: [
-      'Отчет о неопределенности измеряемой величины сформирован для показателя «Нитрит-ионы» по ГОСТ 33045-2014. Расчет учитывает основные составляющие неопределенности фотометрического определения: спектрофотометрический канал КФК-3, аттестованное значение ГСО и вместимость мерной колбы 200 мл.',
-      'Входные величины рассматриваются как независимые. Коэффициенты чувствительности для составляющих бюджета приняты равными 1, поскольку расчет выполняется в относительной модели вклада источников неопределенности.',
+      `Отчет о неопределенности измеряемой величины сформирован для показателя «Нитрит-ионы» по ГОСТ 33045-2014. Расчет учитывает основные составляющие неопределенности фотометрического определения: спектрофотометрический канал КФК-3, аттестованное значение ГСО и вместимость мерной колбы VК${formatNumber(uncertainty.flaskVolume)}.`,
+      'Входные величины рассматриваются как независимые. Составляющие с разными единицами измерения сначала приводятся к относительным стандартным неопределенностям, после чего суммарная относительная неопределенность переводится в абсолютную неопределенность результата.',
     ],
     formula: 'Y = f(X1, X2, X3...)',
     formulas: [
       'Y = f(X1, X2, X3...)',
-      'Y = f(КФК, VК200, ГСО, Оператор)',
+      `Y = f(КФК, VК${formatNumber(uncertainty.flaskVolume)}, ГСО, Оператор)`,
       'Xср = ΣXi / n',
-      'u(КФК) = a / √3',
-      'u(ГСО) = a / √3',
-      'u(Колба) = a / √6',
-      'uc = √(u²КФК + u²ГСО + u²Колба)',
+      'uотн(КФК) = (a / √3) / λ',
+      'uотн(ГСО) = (a / √3) / 100',
+      'uотн(Колба) = (a / √6) / VК',
+      'uc = Xср × √(u²отн.КФК + u²отн.ГСО + u²отн.Колба)',
       'U = uc × k',
     ],
     legend: [
       'Y — результат измерения массовой концентрации нитрит-ионов',
       'Xi — отдельный результат наблюдения, мг/дм³',
       'Xср — среднее арифметическое значение наблюдений',
-      'u — стандартная неопределенность входной величины',
-      'uc — стандартная суммарная неопределенность',
+      'λ — номинальная длина волны фотометрирования, 520 нм',
+      'uотн — относительная стандартная неопределенность входной величины',
+      'uc — стандартная суммарная неопределенность результата, мг/дм³',
       'U — расширенная неопределенность при коэффициенте охвата k = 2',
     ],
     rows: [
@@ -1545,7 +1565,7 @@ function createNitriteUncertaintySection(input: CalculationInput, fallbackConcen
       { label: 'Описание метода', value: uncertainty.methodDescription },
       { label: 'Температура', value: uncertainty.temperature },
       { label: 'Влажность', value: uncertainty.humidity },
-      { label: '3. Модель измерения', value: 'Y = f(X1,X2,X3...); Y = f(КФК, VК200, ГСО, Оператор)' },
+      { label: '3. Модель измерения', value: `Y = f(X1,X2,X3...); Y = f(КФК, VК${formatNumber(uncertainty.flaskVolume)}, ГСО, Оператор)` },
       { label: '6. Корреляции', value: 'Ни одна из входных величин не рассматривается коррелированной друг с другом в какой-либо значительной степени.' },
       { label: '7. Коэффициенты чувствительности', value: 'Коэффициенты чувствительности приняты равными 1 для всех составляющих бюджета.' },
     ],
@@ -1568,12 +1588,12 @@ function createNitriteUncertaintySection(input: CalculationInput, fallbackConcen
         rows: [
           ['1', 'КФК-3', 'B', 'Прямоугольное'],
           ['2', 'ГСО', 'B', 'Прямоугольное'],
-          ['3', 'Мерная колба', 'B', 'Треугольное'],
+          ['3', `Мерная колба VК${formatNumber(uncertainty.flaskVolume)}`, 'B', 'Треугольное'],
         ],
       },
       {
         title: '13. Бюджет неопределенности',
-        note: 'Бюджет неопределенности содержит значения входных величин, интервалы допускаемой погрешности, стандартные неопределенности и вклад каждой составляющей в суммарную неопределенность.',
+        note: 'Бюджет неопределенности содержит исходные интервалы допускаемой погрешности. Стандартная неопределенность и вклад приведены в относительных единицах, чтобы корректно объединить нм, проценты и мл, а затем перевести их в мг/дм³ через Xср.',
         columns: [
           'Величина',
           'Ед. изм.',
@@ -1604,13 +1624,13 @@ function createNitriteUncertaintySection(input: CalculationInput, fallbackConcen
       },
     ],
     items: [
-      '3. Модель измерения описывает зависимость результата от входных величин, влияющих на фотометрическое определение нитрит-ионов. В модели учитываются приборная составляющая КФК-3, вместимость мерной колбы VК200, аттестованное значение ГСО и вклад оператора при выполнении процедуры.',
+      `3. Модель измерения описывает зависимость результата от входных величин, влияющих на фотометрическое определение нитрит-ионов. В модели учитываются приборная составляющая КФК-3, вместимость мерной колбы VК${formatNumber(uncertainty.flaskVolume)}, аттестованное значение ГСО и вклад оператора при выполнении процедуры.`,
       `4. Среднее значение наблюдений: Xср = (${uncertainty.observations.map(formatNumber).join(' + ')}) / ${uncertainty.observations.length} = ${formatNumber(uncertainty.average)} мг/дм³.`,
       '7. Коэффициенты чувствительности показывают, как изменение входной величины влияет на результат. Для настоящего расчета коэффициенты приняты равными 1.',
-      `8. Неопределенность КФК-3: u = a / √3 = ${formatNumber(uncertainty.kfkError)} / √3 = ${formatNumber(uncertainty.kfkUncertainty)} нм. Прямоугольное распределение применено, поскольку известно только предельное значение погрешности прибора.`,
-      `9. Неопределенность ГСО: u = a / √3 = ${formatNumber(uncertainty.gsoError)} / √3 = ${formatNumber(uncertainty.gsoUncertainty)} %. Прямоугольное распределение отражает равновероятное нахождение истинного значения внутри заданного интервала.`,
-      `10. Неопределенность мерной колбы: u = a / √6 = ${formatNumber(uncertainty.flaskError)} / √6 = ${formatNumber(uncertainty.flaskUncertainty)} мл. Треугольное распределение принято для объемной меры, так как значения ближе к центру интервала более вероятны.`,
-      `11. Стандартная суммарная неопределенность: uc = √(${formatNumber(uncertainty.kfkUncertainty)}² + ${formatNumber(uncertainty.gsoUncertainty)}² + ${formatNumber(uncertainty.flaskUncertainty)}²) = ${formatNumber(uncertainty.combinedUncertainty)}.`,
+      `8. Неопределенность КФК-3: u = a / √3 = ${formatNumber(uncertainty.kfkError)} / √3 = ${formatNumber(uncertainty.kfkAbsoluteUncertainty)} нм; uотн = ${formatNumber(uncertainty.kfkAbsoluteUncertainty)} / ${formatNumber(uncertainty.nominalWavelength)} = ${formatNumber(uncertainty.kfkUncertainty)}. Прямоугольное распределение применено, поскольку известно только предельное значение погрешности прибора.`,
+      `9. Неопределенность ГСО: u = a / √3 = ${formatNumber(uncertainty.gsoError)} / √3 = ${formatNumber(uncertainty.gsoAbsoluteUncertainty)} %; uотн = ${formatNumber(uncertainty.gsoAbsoluteUncertainty)} / 100 = ${formatNumber(uncertainty.gsoUncertainty)}. Прямоугольное распределение отражает равновероятное нахождение истинного значения внутри заданного интервала.`,
+      `10. Неопределенность мерной колбы VК${formatNumber(uncertainty.flaskVolume)}: u = a / √6 = ${formatNumber(uncertainty.flaskError)} / √6 = ${formatNumber(uncertainty.flaskAbsoluteUncertainty)} мл; uотн = ${formatNumber(uncertainty.flaskAbsoluteUncertainty)} / ${formatNumber(uncertainty.flaskVolume)} = ${formatNumber(uncertainty.flaskUncertainty)}. Треугольное распределение принято для объемной меры, так как значения ближе к центру интервала более вероятны.`,
+      `11. Стандартная суммарная неопределенность: uc = Xср × √(${formatNumber(uncertainty.kfkUncertainty)}² + ${formatNumber(uncertainty.gsoUncertainty)}² + ${formatNumber(uncertainty.flaskUncertainty)}²) = ${formatNumber(uncertainty.average)} × ${formatNumber(uncertainty.relativeCombinedUncertainty)} = ${formatNumber(uncertainty.combinedUncertainty)} мг/дм³.`,
       `12. Расширенная неопределенность: U = uc × k = ${formatNumber(uncertainty.combinedUncertainty)} × ${formatNumber(uncertainty.coverageFactor)} = ${formatNumber(uncertainty.expandedUncertainty)}. Доверительная вероятность: P = ${formatNumber(uncertainty.confidenceLevel)} (95%).`,
       `14. Представление результата: (${formatNumber(uncertainty.average)} ± ${formatNumber(uncertainty.expandedUncertainty)}) мг/дм³, при K = ${formatNumber(uncertainty.coverageFactor)}, P = ${formatNumber(uncertainty.confidenceLevel)}.`,
       `15. Расчет выполнил: ${input.specialist || 'Специалист'}`,
@@ -1649,7 +1669,11 @@ function getNitriteUncertaintyDefaultValues(): Record<string, string> {
 
 function calculateNitriteUncertainty(input: CalculationInput, fallbackConcentration: number | null) {
   const values = { ...getNitriteUncertaintyDefaultValues(), ...input.values };
-  const observationRows = parseNitriteUncertaintyObservations(values.nitriteObservations);
+  const mainConcentration = parseNumber(values.nitriteMainConcentration || '') ?? deriveNitriteMainConcentration(values) ?? fallbackConcentration;
+  const observationRows =
+    values.nitriteObservationsSource !== 'manual' && mainConcentration !== null
+      ? parseNitriteUncertaintyObservations(JSON.stringify(createNitriteUncertaintyObservationsFromMainResult(mainConcentration)))
+      : parseNitriteUncertaintyObservations(values.nitriteObservations);
   const observations = observationRows
     .map((row) => row.numericValue)
     .filter((value): value is number => value !== null && value >= 0);
@@ -1661,16 +1685,21 @@ function calculateNitriteUncertainty(input: CalculationInput, fallbackConcentrat
   const flaskError = getNumberOrDefault(values.nitriteFlaskError, 0.8);
   const coverageFactor = getNumberOrDefault(values.nitriteCoverageFactor, 2);
   const confidenceLevel = getNumberOrDefault(values.nitriteConfidenceLevel, 0.95);
-  const kfkUncertainty = kfkError / Math.sqrt(3);
-  const gsoUncertainty = gsoError / Math.sqrt(3);
-  const flaskUncertainty = flaskError / Math.sqrt(6);
-  const combinedUncertainty = Math.sqrt(kfkUncertainty ** 2 + gsoUncertainty ** 2 + flaskUncertainty ** 2);
+  const nominalWavelength = 520;
+  const kfkAbsoluteUncertainty = kfkError / Math.sqrt(3);
+  const gsoAbsoluteUncertainty = gsoError / Math.sqrt(3);
+  const flaskAbsoluteUncertainty = flaskError / Math.sqrt(6);
+  const kfkUncertainty = kfkAbsoluteUncertainty / nominalWavelength;
+  const gsoUncertainty = gsoAbsoluteUncertainty / 100;
+  const flaskUncertainty = flaskAbsoluteUncertainty / flaskVolume;
+  const relativeCombinedUncertainty = Math.sqrt(kfkUncertainty ** 2 + gsoUncertainty ** 2 + flaskUncertainty ** 2);
+  const combinedUncertainty = averageValue * relativeCombinedUncertainty;
   const expandedUncertainty = combinedUncertainty * coverageFactor;
   const componentsWithoutPercent: NitriteUncertaintyComponent[] = [
     {
       label: 'КФК-3',
       unit: 'нм',
-      value: 'КФК-3',
+      value: `λ=${formatNumber(nominalWavelength)}`,
       interval: kfkError,
       type: 'B',
       distribution: 'Прямоугольное',
@@ -1694,7 +1723,7 @@ function calculateNitriteUncertainty(input: CalculationInput, fallbackConcentrat
       percentContribution: 0,
     },
     {
-      label: 'Мерная колба',
+      label: `Мерная колба VК${formatNumber(flaskVolume)}`,
       unit: 'мл',
       value: formatNumber(flaskVolume),
       interval: flaskError,
@@ -1728,9 +1757,14 @@ function calculateNitriteUncertainty(input: CalculationInput, fallbackConcentrat
     gsoError,
     flaskVolume,
     flaskError,
+    nominalWavelength,
+    kfkAbsoluteUncertainty,
+    gsoAbsoluteUncertainty,
+    flaskAbsoluteUncertainty,
     kfkUncertainty,
     gsoUncertainty,
     flaskUncertainty,
+    relativeCombinedUncertainty,
     combinedUncertainty,
     coverageFactor,
     confidenceLevel,
@@ -1738,6 +1772,34 @@ function calculateNitriteUncertainty(input: CalculationInput, fallbackConcentrat
     components,
     finalText: `(${formatNumber(averageValue)} ± ${formatNumber(expandedUncertainty)}) мг/дм³, при K = ${formatNumber(coverageFactor)}, P = ${formatNumber(confidenceLevel)}`,
   };
+}
+
+function deriveNitriteMainConcentration(values: Record<string, string>) {
+  const k = parseNumber(values.k ?? '');
+  const a = parseNumber(values.a ?? '');
+  const vk = parseNumber(values.vk ?? '');
+  const v = parseNumber(values.v ?? '');
+  const f = values.f?.trim() ? parseNumber(values.f) : 1;
+
+  if (k === null || a === null || vk === null || v === null || f === null || k <= 0 || a < 0 || vk <= 0 || v <= 0 || f <= 0) {
+    return null;
+  }
+
+  return (k * a * vk * f) / v;
+}
+
+function createNitriteUncertaintyObservationsFromMainResult(value: number) {
+  const formattedValue = formatNitriteObservationInput(value);
+  return [
+    { id: 'nitrite-observation-1', value: formattedValue },
+    { id: 'nitrite-observation-2', value: formattedValue },
+    { id: 'nitrite-observation-3', value: formattedValue },
+    { id: 'nitrite-observation-4', value: formattedValue },
+  ];
+}
+
+function formatNitriteObservationInput(value: number) {
+  return Number(value.toFixed(6)).toString();
 }
 
 function parseNitriteUncertaintyObservations(value: string | undefined): NitriteObservationSummary[] {

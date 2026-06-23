@@ -121,6 +121,45 @@ export function CalculationPage() {
     );
   }, [indicator, activeHardnessTab, activeNitriteTab, sampleNumber, sampleDate, specialist, values]);
 
+  useEffect(() => {
+    if (indicator?.id !== 'nitrites') {
+      return;
+    }
+
+    const concentration = calculateNitriteMainConcentration(values);
+    if (concentration === null) {
+      return;
+    }
+
+    const formattedConcentration = formatNitriteInputNumber(concentration);
+
+    if (values.nitriteObservationsSource === 'manual') {
+      if (values.nitriteMainConcentration === formattedConcentration) {
+        return;
+      }
+
+      setValues((current) => ({
+        ...current,
+        nitriteMainConcentration: formattedConcentration,
+      }));
+      return;
+    }
+
+    const nextObservations = createNitriteObservationsFromMainResult(formattedConcentration);
+    const nextSerialized = JSON.stringify(nextObservations);
+
+    if (values.nitriteMainConcentration === formattedConcentration && values.nitriteObservations === nextSerialized) {
+      return;
+    }
+
+    setValues((current) => ({
+      ...current,
+      nitriteMainConcentration: formattedConcentration,
+      nitriteObservations: nextSerialized,
+      nitriteObservationsSource: 'main',
+    }));
+  }, [indicator, values]);
+
   if (!laboratory || !indicator) {
     return <Navigate to="/" replace />;
   }
@@ -1215,6 +1254,15 @@ function createDefaultNitriteObservations(): NitriteObservationRow[] {
   ];
 }
 
+function createNitriteObservationsFromMainResult(value: string): NitriteObservationRow[] {
+  return [
+    { id: 'nitrite-observation-1', value },
+    { id: 'nitrite-observation-2', value },
+    { id: 'nitrite-observation-3', value },
+    { id: 'nitrite-observation-4', value },
+  ];
+}
+
 function parseNitriteObservationRows(values: Record<string, string>): NitriteObservationRow[] {
   try {
     const parsed = JSON.parse(values.nitriteObservations || nitriteUncertaintyDefaults.nitriteObservations);
@@ -1229,6 +1277,24 @@ function parseNitriteObservationRows(values: Record<string, string>): NitriteObs
   }
 
   return createDefaultNitriteObservations();
+}
+
+function calculateNitriteMainConcentration(values: Record<string, string>) {
+  const k = parseUiNumber(values.k ?? '');
+  const a = parseUiNumber(values.a ?? '');
+  const vk = parseUiNumber(values.vk ?? '');
+  const v = parseUiNumber(values.v ?? '');
+  const f = values.f?.trim() ? parseUiNumber(values.f) : 1;
+
+  if (k === null || a === null || vk === null || v === null || f === null || k <= 0 || a < 0 || vk <= 0 || v <= 0 || f <= 0) {
+    return null;
+  }
+
+  return (k * a * vk * f) / v;
+}
+
+function formatNitriteInputNumber(value: number) {
+  return Number(value.toFixed(6)).toString();
 }
 
 function createNitriteObservationId() {
@@ -1263,6 +1329,15 @@ function getNitriteAverage(rows: NitriteObservationRow[]) {
   return `${new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 6 }).format(averageValue)} мг/дм³`;
 }
 
+function formatNitriteFlaskVolumeLabel(value: string) {
+  const parsed = parseUiNumber(value);
+  if (parsed === null) {
+    return '200';
+  }
+
+  return new Intl.NumberFormat('ru-RU', { maximumFractionDigits: 2 }).format(parsed);
+}
+
 function NitriteUncertaintyForm({ values, onChange }: NitriteUncertaintyFormProps) {
   const textFields = [
     ['nitriteObject', 'Объект измерения'],
@@ -1281,9 +1356,11 @@ function NitriteUncertaintyForm({ values, onChange }: NitriteUncertaintyFormProp
     ['nitriteFlaskVolume', 'Объем колбы', 'мл'],
     ['nitriteFlaskError', 'Погрешность мерной колбы', 'мл'],
   ];
+  const flaskVolumeLabel = formatNitriteFlaskVolumeLabel(values.nitriteFlaskVolume ?? nitriteUncertaintyDefaults.nitriteFlaskVolume);
 
   function updateObservationRows(nextRows: NitriteObservationRow[]) {
     onChange('nitriteObservations', JSON.stringify(nextRows));
+    onChange('nitriteObservationsSource', 'manual');
   }
 
   function handleObservationChange(rowId: string, value: string) {
@@ -1327,10 +1404,10 @@ function NitriteUncertaintyForm({ values, onChange }: NitriteUncertaintyFormProp
 
       <div className="rounded border border-blue-100 bg-blue-50 px-4 py-3 text-sm leading-6 text-laboratory-navy">
         <p className="font-serif text-base font-semibold">Y = f(X1,X2,X3...)</p>
-        <p className="mt-1 font-serif text-base font-semibold">Y = f(КФК, VК200, ГСО, Оператор)</p>
+        <p className="mt-1 font-serif text-base font-semibold">Y = f(КФК, VК{flaskVolumeLabel}, ГСО, Оператор)</p>
         <p className="mt-2">
           Модель измерения отражает зависимость результата фотометрического определения от приборной составляющей,
-          вместимости мерной колбы, аттестованного значения ГСО и действий оператора при подготовке и измерении пробы.
+          вместимости мерной колбы VК{flaskVolumeLabel}, аттестованного значения ГСО и действий оператора при подготовке и измерении пробы.
         </p>
       </div>
 
@@ -1407,7 +1484,7 @@ function NitriteUncertaintyForm({ values, onChange }: NitriteUncertaintyFormProp
               {[
                 ['КФК-3', 'B', 'Прямоугольное'],
                 ['ГСО', 'B', 'Прямоугольное'],
-                ['Мерная колба', 'B', 'Треугольное'],
+                [`Мерная колба VК${flaskVolumeLabel}`, 'B', 'Треугольное'],
               ].map((row) => (
                 <tr key={row[0]}>
                   {row.map((cell) => (
